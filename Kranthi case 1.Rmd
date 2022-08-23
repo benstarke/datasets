@@ -1,0 +1,440 @@
+---
+title: "Kranthi case 1"
+output: pdf_document
+date: '2022-07-05'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Introduction
+## Executive Summary
+
+* I started to understand the dataset by importing data and this data set involves many visualizations and includes modeling. * 
+# Introduction
+
+## TAYKO SOFTWARE 
+
+#The data file Tayko.csv consist of 25 columns, with id as sequence number, and we consider 24 variables to predict the output.
+
+## Business Problem:
+### Predicting Software Reselling Profits
+### Background: Tayko is a software catalog firm that sells games and educational software. It started out as a software manufacturer and later added third-party titles to its offerings. It has recently put together a revised collection of items in a new catalog, which it is preparing to roll out in a mailing.
+### In addition to its own software titles, Tayko’s customer list is a key asset. In an attempt to expand its customer base, it has recently joined a consortium of catalog firms that specialize in computer and software products. The consortium affords members the opportunity to mail catalogs to names drawn from a pooled list of customers. Members supply their own customer lists to the pool, and can “withdraw” an equivalent number of names each quarter. Members are allowed to do predictive modeling on the records in the pool so they can do a better job of selecting names from the pool.
+
+### Further, Tayko has supplied its customer list of 200,000 names to the pool, which totals over 5,000,000 names, so it is now entitled to draw 200,000 names for a mailing. Tayko would like to select the names that have the best chance of performing well, so it conducts a test—it draws 20,000 names from the pool and does a test mailing of the new catalog.
+
+### OBJECTIVE: From the dataset Tayko.csv, Purchase output variable is considered for the analysis and prediction.  The objective of the model is to classify records into 'PURCHASE' or "NO PURCHASE'. 
+
+# STAGE 1:
+## Improting the required packages
+```{r}
+#LOADING AND EXPLORING DATA
+#Loading required libraries.
+library(knitr)
+library(ggplot2)
+library(plyr)
+library(dplyr)
+library(corrplot)
+library(gridExtra)
+library(scales)
+library(ggrepel)
+
+```
+
+
+```{r}
+#Below, I am reading the Tayko.csv’s as dataframes into R.
+library(readr)
+tayko <- read_csv("Tayko.csv")
+```
+
+**Data size and structure**
+```{r}
+dim(tayko)
+```
+
+```{r}
+str(tayko[,c(1:10, 25)]) #display first 10 variables and the response variable
+```
+
+**Data cleaning**
+
+```{r}
+# get column names
+colnames(tayko)
+```
+
+```{r}
+
+names(tayko)[21] <- "Web.order"
+names(tayko)[22] <- "Gender"
+
+
+# get column names
+colnames(tayko)
+```
+
+
+
+```{r}
+ggplot(tayko,aes(x = Spending))+
+      geom_histogram(aes(y=..density..))+
+      geom_density(color="Green", fill="Green", alpha=0.5)
+```
+
+from the above histogram we can say that lower the spending higher the density, It means peolpe with lower spending are very high compared to people with higher spending 
+```{r}
+summary(tayko)
+```
+
+
+```{r}
+numericVars <- which(sapply(tayko, is.numeric)) #index vector numeric variables
+numericVarNames <- names(numericVars) #saving names vector for use later on
+cat('There are', length(numericVars), 'numeric variables')
+```
+
+
+```{r}
+tayko_numVar <- tayko[, numericVars]
+cor_numVar <- cor(tayko_numVar, use="pairwise.complete.obs") #correlations of all numeric variables
+```
+
+```{r}
+#sort on decreasing correlations with SalePrice
+cor_sorted <- as.matrix(sort(cor_numVar[,'Spending'], decreasing = TRUE))
+ #select only high corelations
+CorHigh <- names(which(apply(cor_sorted, 1, function(x) abs(x)>0.5)))
+cor_numVar <- cor_numVar[CorHigh, CorHigh]
+
+corrplot.mixed(cor_numVar, tl.col="black", tl.pos = "lt")
+```
+the highest correlation is for freq-spending pair when compared to other pairs
+
+```{r}
+ggplot(data=tayko[!is.na(tayko$Spending),], aes(x=factor(Purchase), y=Spending))+
+        geom_boxplot(col='blue') + labs(x='Purchase') +
+        scale_y_continuous(breaks= seq(0, 80, by=1000), labels = comma)
+```
+Based on the the above boxplot we can say that if there is no purchase there is no spending and there is slight increase in spending when purchase is at 1 
+
+```{r}
+ggplot(data=tayko[!is.na(tayko$Spending),], aes(x=Spending, y=Freq))+
+        geom_point(col='blue') + geom_smooth(method = "lm", se=FALSE, color="black", aes(group=1)) +
+        scale_y_continuous(breaks= seq(0, 800, by=10000), labels = comma) +
+        geom_text_repel(aes(label = ifelse(tayko$Freq[!is.na(tayko$Spending)]>4500, rownames(all), '')))
+```
+when spending is below 500 the frequency of people is more compared to people spending more than 500. it seems that there are many people in the category of spending below 500.
+
+# STAGE 2:Data Mining Techniques(Methodology)
+
+## We have been instructed to use three data mining techniques to implement our predictive models. The 3 selected techniques were: Multiple regression analysis, Logistic regression and Regression tree. 
+
+## Logistic Regression  -  we have implemeneted this technique to  help in estimating the probability of an individulas to purchase or not to purchase based on our given Tayko dataset of independent variables. The dependent variable in our case is Purchase variable and is bounded between 0 and 1.
+
+## Regression tree  -  Is a technique that identifies what combination of our dataset factors  best differentiates between individuals(who purchases/not purchases) based on our categorical variable of interest which is (Purchase variable)
+
+## Multiple regression analysis   -  Is a technique that have been used to analyze the relationship between a single dependent variable (which is Purchase variable) and several independent variables(the predictor variables). The objective of multiple regression analysis is to use the independent variables whose values are known to predict the value of the single dependent value.
+
+# Assignment
+
+## 1. Each catalog costs approximately $2 to mail (including printing, postage,
+## and mailing costs). Estimate the gross profit that the firm could expect
+## from the remaining 180,000 names if it selects them randomly from the
+## pool.
+
+```{r, echo=FALSE, warning=FALSE}
+#Below, I am reading the Tayko.csv’s as dataframes into R.
+library(readr)
+tayko <- read_csv("Tayko.csv")
+
+# we partition tayko dataset
+set.seed(1234)
+## partitioning into training (60%) and validation (40%)
+train.rows <- sample(rownames(tayko), dim(tayko)[1]*0.6)
+valid.rows <- sample(setdiff(rownames(tayko), train.rows),dim(tayko)[1]*0.2)
+# assign the remaining 20% row IDs serve as test
+test.rows <- setdiff(rownames(tayko), union(train.rows, valid.rows))
+# create the 3 data frames by collecting all columns from the appropriate rows
+train.data <- tayko[train.rows, ]
+valid.data <- tayko[valid.rows, ]
+test.data <- tayko[test.rows, ]
+
+```
+
+
+## 2. Develop a model for classifying a customer as a purchaser or nonpurchaser.
+## a. Partition the data randomly into a training set (800 records), validation
+## set (700 records), and test set (500 records).
+
+```{r, echo=FALSE, warning=FALSE}
+#Below, I am reading the Tayko.csv’s as dataframes into R.
+library(readr)
+tayko <- read_csv("Tayko.csv")
+
+# training set (800 records) = 40%=0.4
+
+## validation set (700 records) =35%=0.35
+
+## test set (500 records) ==25%=0.25
+
+# we partition tayko dataset
+set.seed(1234)
+## partitioning into training (60%) and validation (40%)
+train.rows <- sample(rownames(tayko), dim(tayko)[1]*0.4)
+valid.rows <- sample(setdiff(rownames(tayko), train.rows),dim(tayko)[1]*0.35)
+# assign the remaining 20% row IDs serve as test
+test.rows <- setdiff(rownames(tayko), union(train.rows, valid.rows))
+# create the 3 data frames by collecting all columns from the appropriate rows
+train.data <- tayko[train.rows, ]
+valid.data <- tayko[valid.rows, ]
+test.data <- tayko[test.rows, ]
+
+head(train.data, n =5)
+head(valid.data, n =5)
+head(test.data, n =5)
+```
+
+## b. Run stepwise logistic regression using backward elimination to select
+## the best subset of variables, then use this model to classify the data into
+## purchasers and nonpurchasers. Use only the training set for running
+## the model. (Logistic regression is used because it yields an estimated
+## “probability of purchase,” which is required later in the analysis.)
+
+
+```{r, echo=FALSE, warning=FALSE}
+
+library(tidyverse)  # for easy data manipulation and visualization
+library(caret)   # for easy machine learning workflow
+library(leaps) # for computing stepwise regression
+library(MASS)
+
+
+
+# run logistic regression
+# use glm() (general linear model) with family = "binomial" to fit a logistic
+# regression.
+full.model <- glm(Purchase ~ ., data = train.data, family = "binomial")
+# Stepwise regression model
+step.model <- stepAIC(full.model, direction = "backward", trace = FALSE)
+summary(step.model)
+
+```
+
+
+
+## 3. Develop a model for predicting spending among the purchasers.
+## a. Create a vector of ID’s of only purchasers’ records (Purchase = 1).
+
+```{r, echo=FALSE, warning=FALSE}
+
+library(tidyverse) # includes the dplyr
+
+vector_ID <- tayko %>% filter(tayko$Purchase > 0)
+
+head(vector_ID, n=5)
+```
+
+
+## b. Partition this dataset into the training and validation records. (Use the
+## same training/validation labels from the earlier partitioning; one way
+## is to use function intersect() to find IDs of purchasers in the original
+## partitions).
+
+```{r, echo=FALSE, warning=FALSE}
+
+# Intersection of vector_ID with previous dataset   
+new.df <- intersect(tayko, vector_ID) 
+
+# we partition tayko dataset
+set.seed(1234)
+## partitioning into training (60%) and validation (40%)
+train.rows <- sample(rownames(new.df), dim(new.df)[1]*0.4)
+valid.rows <- sample(setdiff(rownames(new.df), train.rows),dim(new.df)[1]*0.35)
+# assign the remaining 20% row IDs serve as test
+test.rows <- setdiff(rownames(new.df), union(train.rows, valid.rows))
+# create the 3 data frames by collecting all columns from the appropriate rows
+new.train.data <- new.df[train.rows, ]
+new.valid.data <- new.df[valid.rows, ]
+new.test.data <- new.df[test.rows, ]
+
+head(new.train.data, n= 5)
+head(new.test.data, n= 5)
+head(new.valid.data, n= 5)
+```
+
+
+
+## c. Develop models for predicting spending, using:
+### i. Multiple linear regression (use stepwise regression)
+```{r, echo=FALSE, warning=FALSE}
+
+#define intercept-only model
+intercept_only <- lm(Spending ~ 1, data=new.df)
+
+#define model with all predictors
+all <- lm(Spending ~ ., data=new.df)
+
+#perform forward stepwise regression
+forward <- step(intercept_only, direction='forward', scope=formula(all), trace=0)
+
+#lets view results of forward stepwise regression
+forward$anova
+
+```
+
+
+
+### ii. Regression trees
+```{r, echo=FALSE, warning=FALSE}
+library(rpart)
+library(rpart.plot)
+library(dplyr)
+
+
+# Regresion tree
+reg.tree <- rpart(Spending ~ ., data = new.train.data, method = "class")
+options(scipen=999)
+# plot tree
+#prp(reg.tree, type = 1, extra = 1, under = TRUE, split.font = 1, varlen = -10)
+
+```
+
+
+### Below are the predicted values of our Purchase variable based on the predictor variables using our Regression Tree technique
+```{r}
+
+# use predict()  to compute predicted probabilities.
+reg.tree.pred <- predict(reg.tree, new.valid.data, type = "vector")
+
+
+table_mat_data <- data.frame(actual = new.valid.data$Spending, predicted = reg.tree.pred)
+
+head(table_mat_data, n=5)
+
+```
+
+### Below displays the accuracy  of our Regression Tree  technique in which we can tell whether to be used or not in performing predictions using the dataset given when compared with other techniques performance
+
+
+## d. Choose one model on the basis of its performance on the validation
+## data
+
+### In nutshell, from the 3 data mining results, based on each technique accuracy, its clear that, Regression tree best fits to the dataset given as its performance on the accuracy is perfect when compared to  Multiple linear regression (use stepwise regression)
+### Therefore, i select Regression tree as the best fit technique to be used to predict "Spending" as the target variable 
+
+
+## 4. Return to the original test data partition. Note that this test data partition
+## includes both purchasers and nonpurchasers. Create a new data frame
+## called Score Analysis that contains the test data portion of this dataset.
+
+
+```{r, echo=FALSE, warning=FALSE}
+# New dataframe
+set.seed(12345)
+sample <- sample(c(TRUE, FALSE), nrow(test.data), replace=TRUE, prob=c(0.58,0.2))
+Score.Analysis  <- test.data[sample, ]
+Score.train   <- test.data[!sample, ]
+
+```
+
+
+### a. Add a column to the data frame with the predicted scores from the
+### logistic regression.
+
+```{r, echo=FALSE, warning=FALSE}
+# New dataframe
+
+##scores from the logistic regression.
+
+#fit logistic regression model
+log.model <- glm(Spending~ ., data=train.data)
+
+#disable scientific notation for model summary
+options(scipen=999)
+
+# use predict()  to compute predicted probabilities.
+log.model.pred <- predict(log.model, new.valid.data, type = "response")
+
+# predicted dataframe
+predicted <- data.frame(actual = new.valid.data$Spending, predicted = log.model.pred)
+
+# add a column
+new.added <- cbind(Score.Analysis, predicted$predicted)
+
+# view
+head(new.added, n =5)
+
+```
+
+### b. Add another column with the predicted spending amount from the
+### prediction model chosen.
+```{r, echo=FALSE, warning=FALSE}
+
+# add a column
+new.added.two <- cbind(new.added, table_mat_data$predicted)
+
+## rename the added columns
+names(new.added.two)[names(new.added.two) == 'predicted$predicted'] <- 'logistic.pred'
+
+names(new.added.two)[names(new.added.two) == 'table_mat_data$predicted'] <- 'best.selected.pred'
+
+
+# view
+head(new.added.two, n=5)
+```
+
+### c. Add a column for “adjusted probability of purchase” by multiplying
+### “predicted probability of purchase” by 0.107. This is to adjust for oversampling the purchasers (see earlier description).
+```{r, echo=FALSE, warning=FALSE}
+library(tidyverse)
+# New dataframe
+
+final.df <- new.added.two %>% mutate(adjusted.column = new.added.two$best.selected.pred * 0.107)
+
+head(final.df, n=5)
+
+```
+
+
+### d. Add a column for expected spending: adjusted probability of purchase
+### × predicted spending.
+```{r, echo=FALSE, warning=FALSE}
+library(tidyverse)
+# New dataframe
+
+final.data.df <- final.df %>% mutate(Expected.spending = final.df$adjusted.column * best.selected.pred)
+
+head(final.data.df, n=5)
+
+```
+
+
+### e. Plot the lift chart of the expected spending.
+```{r, echo=FALSE, warning=FALSE}
+
+library(gains)
+gain <- gains(final.data.df$Expected.spending, reg.tree.pred, groups=length(reg.tree.pred))
+
+# plot lift chart
+plot(c(0,gain$cume.pct.of.total*sum(final.data.df$Expected.spending))~c(0,gain$cume.obs),
+xlab="Predicted spending", ylab="Expected spending", main="Expected spending Lift Curve", type="l")
+lines(c(0,sum(final.data.df$Expected.spending))~c(0, dim(final.data.df)[1]), lty=2)
+
+
+```
+
+
+### f. Using this lift curve, estimate the gross profit that would result from
+### mailing to the 180,000 names on the basis of your data mining models.
+
+### The Lift curve tells us that by picking the 180,000 of names as ranked by the model, we are going to hit four times more positive instances than by selecting a random sample with 180,000 of the names.
+
+
+
+
+
+
